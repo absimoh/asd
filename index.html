@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Luminode Solar System</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      padding: 0;
+      margin: 0;
+    }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: radial-gradient(circle at top, #101020 0%, #02040a 60%, #000000 100%);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #ffffff;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #hud {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      padding: 10px 14px;
+      background: rgba(0, 0, 0, 0.55);
+      border-radius: 10px;
+      backdrop-filter: blur(10px);
+      font-size: 13px;
+      line-height: 1.5;
+      max-width: 260px;
+    }
+
+    #hud h1 {
+      font-size: 14px;
+      margin-bottom: 4px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      opacity: 0.9;
+    }
+
+    #hud span {
+      font-size: 11px;
+      opacity: 0.7;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="bg"></canvas>
+
+  <div id="hud">
+    <h1>LUMINODE • ORBIT DEMO</h1>
+    <span>اسحب بالفأرة للدوران • استخدم عجلة الفأرة للتقريب/الإبعاد</span><br />
+    <span>الكواكب تدور حول الشمس بمدارات بسيطة للتجربة فقط.</span>
+  </div>
+
+  <script type="module">
+    import * as THREE from "https://unpkg.com/three@0.164.0/build/three.module.js";
+    import { OrbitControls } from "https://unpkg.com/three@0.164.0/examples/jsm/controls/OrbitControls.js";
+
+    // =============== الأساسيات ===============
+    const canvas = document.getElementById("bg");
+
+    const renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: true,
+    });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x000000, 0.0008);
+
+    const camera = new THREE.PerspectiveCamera(
+      60,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      2000
+    );
+    camera.position.set(0, 90, 260);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.rotateSpeed = 0.5;
+    controls.zoomSpeed = 0.6;
+
+    // =============== إضاءة ===============
+    const ambient = new THREE.AmbientLight(0xffffff, 0.15);
+    scene.add(ambient);
+
+    const sunLight = new THREE.PointLight(0xffffff, 2.6, 0);
+    sunLight.position.set(0, 0, 0);
+    scene.add(sunLight);
+
+    // =============== خلفية نجوم ===============
+    function createStars(count = 1500) {
+      const geometry = new THREE.BufferGeometry();
+      const positions = new Float32Array(count * 3);
+
+      for (let i = 0; i < count; i++) {
+        const r = 900 * Math.random() + 100;
+        const theta = Math.random() * 2 * Math.PI;
+        const phi = Math.acos(2 * Math.random() - 1);
+
+        const x = r * Math.sin(phi) * Math.cos(theta);
+        const y = r * Math.sin(phi) * Math.sin(theta);
+        const z = r * Math.cos(phi);
+
+        positions[i * 3] = x;
+        positions[i * 3 + 1] = y;
+        positions[i * 3 + 2] = z;
+      }
+
+      geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      const material = new THREE.PointsMaterial({
+        size: 1.2,
+        sizeAttenuation: true,
+      });
+
+      const points = new THREE.Points(geometry, material);
+      scene.add(points);
+    }
+    createStars();
+
+    // =============== الشمس ===============
+    const sunGeometry = new THREE.SphereGeometry(14, 48, 48);
+    const sunMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffdd66,
+    });
+    const sun = new THREE.Mesh(sunGeometry, sunMaterial);
+    scene.add(sun);
+
+    // توهج بسيط حول الشمس (اختياري وبسيط)
+    const sunGlowGeometry = new THREE.SphereGeometry(18, 32, 32);
+    const sunGlowMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffaa33,
+      transparent: true,
+      opacity: 0.2,
+    });
+    const sunGlow = new THREE.Mesh(sunGlowGeometry, sunGlowMaterial);
+    scene.add(sunGlow);
+
+    // =============== كواكب + مدارات ===============
+    const planets = [];
+
+    function createOrbit(radius) {
+      const geometry = new THREE.RingGeometry(radius - 0.15 * radius * 0.1, radius + 0.15 * radius * 0.1, 128);
+      const material = new THREE.MeshBasicMaterial({
+        color: 0x444444,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.6,
+      });
+      const ring = new THREE.Mesh(geometry, material);
+      ring.rotation.x = Math.PI / 2;
+      scene.add(ring);
+    }
+
+    function createPlanet({ name, radius, distance, orbitSpeed, rotSpeed, color }) {
+      // المدار
+      createOrbit(distance);
+
+      // محور دوران حول الشمس
+      const pivot = new THREE.Object3D();
+      scene.add(pivot);
+
+      const geometry = new THREE.SphereGeometry(radius, 32, 32);
+      const material = new THREE.MeshStandardMaterial({
+        color,
+        roughness: 0.6,
+        metalness: 0.2,
+      });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.x = distance;
+      pivot.add(mesh);
+
+      planets.push({ name, pivot, mesh, orbitSpeed, rotSpeed });
+    }
+
+    // كواكب تجريبية (أرقام تقريبية بس عشان الشكل)
+    createPlanet({
+      name: "Mercury",
+      radius: 2,
+      distance: 22,
+      orbitSpeed: 0.025,
+      rotSpeed: 0.06,
+      color: 0xb5b5b5,
+    });
+
+    createPlanet({
+      name: "Venus",
+      radius: 3.3,
+      distance: 32,
+      orbitSpeed: 0.018,
+      rotSpeed: 0.04,
+      color: 0xffddaa,
+    });
+
+    createPlanet({
+      name: "Earth",
+      radius: 3.5,
+      distance: 45,
+      orbitSpeed: 0.015,
+      rotSpeed: 0.08,
+      color: 0x4fa6ff,
+    });
+
+    createPlanet({
+      name: "Mars",
+      radius: 2.4,
+      distance: 58,
+      orbitSpeed: 0.013,
+      rotSpeed: 0.07,
+      color: 0xff7744,
+    });
+
+    createPlanet({
+      name: "Jupiter",
+      radius: 7,
+      distance: 78,
+      orbitSpeed: 0.009,
+      rotSpeed: 0.1,
+      color: 0xffc99a,
+    });
+
+    createPlanet({
+      name: "Saturn",
+      radius: 6,
+      distance: 100,
+      orbitSpeed: 0.007,
+      rotSpeed: 0.09,
+      color: 0xf5d7a1,
+    });
+
+    // زحل + حلقات بسيطة
+    const saturn = planets.find((p) => p.name === "Saturn");
+    if (saturn) {
+      const ringGeo = new THREE.RingGeometry(8, 11, 64);
+      const ringMat = new THREE.MeshStandardMaterial({
+        color: 0xd8c9a9,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.9,
+      });
+      const ring = new THREE.Mesh(ringGeo, ringMat);
+      ring.rotation.x = Math.PI / 2.4;
+      saturn.mesh.add(ring);
+    }
+
+    createPlanet({
+      name: "Uranus",
+      radius: 4.5,
+      distance: 125,
+      orbitSpeed: 0.005,
+      rotSpeed: 0.07,
+      color: 0x88ddff,
+    });
+
+    createPlanet({
+      name: "Neptune",
+      radius: 4.5,
+      distance: 145,
+      orbitSpeed: 0.004,
+      rotSpeed: 0.07,
+      color: 0x4466ff,
+    });
+
+    // =============== حلقة التحديث ===============
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // دوران بسيط للشمس
+      sun.rotation.y += 0.002;
+      sunGlow.rotation.y -= 0.001;
+
+      // دوران الكواكب حول الشمس وعلى نفسها
+      planets.forEach((p) => {
+        p.pivot.rotation.y += p.orbitSpeed;
+        p.mesh.rotation.y += p.rotSpeed;
+      });
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    // =============== تغيير الحجم مع الشاشة ===============
+    window.addEventListener("resize", () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    });
+  </script>
+</body>
+</html>
